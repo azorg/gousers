@@ -154,7 +154,6 @@ func GetUsersStat(fname string) (UsersStat, error) {
 	userType := UNKNOWN             // type of active user
 
 	reX := regexp.MustCompile("^:[0-9]$") // user logged to X
-	_ = reX
 
 	for _, u := range users {
 		total[u.Name]++
