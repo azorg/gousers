@@ -11,12 +11,13 @@ import (
 	"os/user"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 )
 
 // User structure delivered from Utmp
 type User struct {
-	Name string    `json:"name,omitempty"` // User name
+	Name string    `json:"name"`           // Username
 	PID  uint32    `json:"pid,omitempty"`  // Process ID
 	TTY  string    `json:"tty,omitempty"`  // TTY device
 	Host string    `json:"host,omitempty"` // Login from
@@ -37,19 +38,30 @@ const (
 	LOCAL_X
 )
 
+// Full user information about user
+type UserInfo struct {
+	UID         string `json:"uid"`                    // User ID
+	GID         string `json:"gid"`                    // Primary group ID
+	Name        string `json:"name"`                   // Username is the login name
+	DisplayName string `json:"display_name,omitempty"` // User display name (may be empty)
+	HomeDir     string `json:"home_dir,omitempty"`     // User's home directory
+	Groups      string `json:"groups,omitempty"`       // Groups that the user is a member of (CSV)
+} // type UserInfo
+
 // Logged user statistics
 type UsersStat struct {
-	Total      int    `json:"total"`                 // Total logged users "Local + Remote + root"
-	LocalX     int    `json:"local_x"`               // Number of users logged in X session (excluding root)
-	Local      int    `json:"local"`                 // Number of local users (excluding root)
-	RemoteX    int    `json:"remote_x"`              // Number of remote users logged in X/xrdp/vnc (excluding root)
-	Remote     int    `json:"remote"`                // Number of remote users (excluding root)
-	Unknown    int    `json:"unknown,omitempty"`     // Total number of unknown logged users (must be 0)
-	LocalRoot  bool   `json:"local_root,omitempty"`  // Local root logged
-	RemoteRoot bool   `json:"remote_root,omitempty"` // Remote root logged
-	User       *User  `json:"user,omitempty"`        // Main active user on host or nil
-	UserType   string `json:"user_type,omitempty"`   // Type of active user
-	UserLogons int    `json:"user_logons,omitempty"` // Number of active user logons
+	Total      int       `json:"total"`                 // Total logged users "Local + Remote + root"
+	LocalX     int       `json:"local_x"`               // Number of users logged in X session (excluding root)
+	Local      int       `json:"local"`                 // Number of local users (excluding root)
+	RemoteX    int       `json:"remote_x"`              // Number of remote users logged in X/xrdp/vnc (excluding root)
+	Remote     int       `json:"remote"`                // Number of remote users (excluding root)
+	Unknown    int       `json:"unknown,omitempty"`     // Total number of unknown logged users (must be 0)
+	LocalRoot  bool      `json:"local_root,omitempty"`  // Local root logged
+	RemoteRoot bool      `json:"remote_root,omitempty"` // Remote root logged
+	UserType   string    `json:"user_type,omitempty"`   // Type of active user
+	UserLogons int       `json:"user_logons,omitempty"` // Number of active user logons
+	User       *User     `json:"user,omitempty"`        // Active user on host or nil
+	UserInfo   *UserInfo `json:"user_info,omitempty"`   // Information about active user or nil
 } // type UsersStat
 
 type userTTY struct {
@@ -134,6 +146,39 @@ func Users(fname string) ([]*User, error) {
 	return users, nil
 } // func Users()
 
+// Get user info by username
+func GetUserInfo(username string) (info *UserInfo, err error) {
+	u, err := user.Lookup(username)
+	if err != nil {
+		return
+	}
+
+	info = &UserInfo{
+		UID:         u.Uid,
+		GID:         u.Gid,
+		Name:        u.Username,
+		DisplayName: u.Name,
+		HomeDir:     u.HomeDir}
+
+	// Find groups that the user is a member of
+	gids, err := u.GroupIds()
+	if err != nil {
+		return
+	}
+
+	var groups []string
+	for _, gid := range gids {
+		grp, err := user.LookupGroupId(gid)
+		if err != nil {
+			return info, err
+		}
+		groups = append(groups, grp.Name)
+	}
+
+	info.Groups = strings.Join(groups, ",")
+	return
+} // func GetUserInfo()
+
 // Get logged user statistics
 func GetUsersStat(users []*User) UsersStat {
 	total := make(map[string]int)   // total logged users "Local + Remote + root"
@@ -170,36 +215,40 @@ func GetUsersStat(users []*User) UsersStat {
 		}
 
 		if u.Name == "root" {
-			if t == LOCAL_X || t == LOCAL {
+			switch t {
+			case LOCAL_X, LOCAL:
 				localRoot = true
-			} else if t == REMOTE_X || t == REMOTE {
+			case REMOTE_X, REMOTE:
 				remoteRoot = true
-			} else { // t == UNKNOWN
+			default: // UNKNOWN
 				localRoot = true // unknown root as local
 				unknown[u.Name]++
-			}
+			} // switch
 
-			if user == nil {
+			if user == nil || user.Name == "root" {
 				user, userType = u, t
 			}
 		} else { // regular user
-			if t == LOCAL_X {
+			switch t {
+			case LOCAL_X:
 				localX[u.Name]++
-			} else if t == LOCAL {
+			case LOCAL:
 				local[u.Name]++
-			} else if t == REMOTE_X {
+			case REMOTE_X:
 				remoteX[u.Name]++
-			} else if t == REMOTE {
+			case REMOTE:
 				remote[u.Name]++
-			} else { // t == UNKNOWN
+			default: // UNKNOWN
 				unknown[u.Name]++
-			}
+			} // switch
 
 			if user == nil || userType <= t {
 				user, userType = u, t
 			}
 		}
 	} // for
+
+	userInfo, _ := GetUserInfo(user.Name)
 
 	// Return result
 	return UsersStat{
@@ -211,19 +260,11 @@ func GetUsersStat(users []*User) UsersStat {
 		Unknown:    len(unknown),
 		LocalRoot:  localRoot,
 		RemoteRoot: remoteRoot,
-		User:       user,
 		UserType:   UserType[userType],
-		UserLogons: total[user.Name]}
+		UserLogons: total[user.Name],
+		User:       user,
+		UserInfo:   userInfo}
 } // func GetUsersStat()
-
-// Get active linux user as user.User by username (or current user)
-func ActiveUser(name string) (*user.User, error) {
-	if name != "" {
-		return user.Lookup(name)
-	} else {
-		return user.Current()
-	}
-} // func ActiveUser()
 
 // Debug print User
 func UserPrint(f *os.File, u *User) {
