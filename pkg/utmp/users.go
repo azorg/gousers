@@ -107,7 +107,7 @@ func Users(fname string) ([]*User, error) {
 
 // Debug print User
 func UserPrint(f *os.File, u *User) {
-	fmt.Fprint(f, u.Time.Format("2006-02-01 15:04:05"))
+	fmt.Fprint(f, u.Time.Format("2006-01-02 15:04:05"))
 	if u.Name != "" {
 		fmt.Fprint(f, " User='", u.Name, "'")
 	}

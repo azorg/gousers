@@ -16,15 +16,16 @@ func Usage() {
 Usage: gousers [options] [command]
 
 Options:
-  -h|--h    - print help about options
-  -f <file> - use a specific file instead of /var/run/utmp
+  -help|--help - print full help
+  -h|--h       - print help about options only
+  -f <file>    - use a specific file instead of /var/run/utmp
 
 Commands:
   user[s] - show users is currently logged (default command)
   dump    - show full dump
 
 Example:
-  gousers --help|-help          - print help
+  gousers --help                - print full help
   gousers [users]               - show users from /var/run/utmp
   gousers -f /var/log/btmp user - show users from /var/run/btmp
   gousers dump                  - dump /var/run/utmp

@@ -129,7 +129,7 @@ func IPv4(addrV6 [4]int32) (IP string) {
 // Debug print Utmp
 func Print(f *os.File, u Utmp) {
 	t := Time(u.TV)
-	fmt.Fprint(f, t.Format("2006-02-01 15:04:05"))
+	fmt.Fprint(f, t.Format("2006-01-02 15:04:05"))
 
 	Type := int(u.Type)
 	fmt.Fprintf(f, " #%d %10s", Type, TypeString[Type])
