@@ -153,7 +153,7 @@ func GetUsersStat(fname string) (UsersStat, error) {
 	user := (*User)(nil)            // main active user on host or nil
 	userType := UNKNOWN             // type of active user
 
-	reX := regexp.MustCompile("^:[0-9]$") // user logged to X
+	reX := regexp.MustCompile("^:[0-9]+$") // user logged to X
 	msX := reX.MatchString
 
 	for _, u := range users {
