@@ -12,7 +12,7 @@ $ make
 $ sudo make install
 ```
 
-## Unistall
+## Uninstall
 ```
 $ sudo make uninstall
 ```
@@ -68,7 +68,7 @@ $ sudo gousers -f /var/log/btmp dump
 2023-07-18 23:54:35 #6 LOGIN_PROC User='root' TTY='pts/5' ID='5' PID=111464 Term/Exit=0/0 SID=0
 ```
 
-### Show user statistics
+### Show logged user statistics (/var/run/utmp)
 ```
 $ gousers stat
 {
