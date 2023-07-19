@@ -154,17 +154,18 @@ func GetUsersStat(fname string) (UsersStat, error) {
 	userType := UNKNOWN             // type of active user
 
 	reX := regexp.MustCompile("^:[0-9]$") // user logged to X
+	msX := reX.MatchString
 
 	for _, u := range users {
 		total[u.Name]++
 
 		// Determinate user type
 		t := UNKNOWN
-		if reX.MatchString(u.Host) || reX.MatchString(u.ID) { // e.g. ":1"
+		if msX(u.Host) || msX(u.ID) || msX(u.TTY) { // e.g. ":1"
 			if u.IP.Equal(net.IP{}) { // IP is empty
 				t = LOCAL_X
 			} else {
-				t = REMOTE_X // FIXME: test and debug it!
+				t = REMOTE_X // FIXME: bad code, fix it later
 			}
 		} else {
 			if u.IP.Equal(net.IP{}) && u.Host == "" { // IP and Host is empty
