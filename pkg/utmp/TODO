@@ -1,2 +1,3 @@
 [-] add support and test 32-bit platform
 [+] add user statistics
+[-] add analyzes of real UID, EUID of logon process

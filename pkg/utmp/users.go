@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/user"
 	"regexp"
 	"sort"
 	"time"
@@ -26,23 +27,23 @@ type User struct {
 } // type User
 
 // Type of active logged user (5 types)
-var UserType = [...]string{"", "remote", "local", "remote_x", "local_x"}
+var UserType = [...]string{"", "remote", "remote_x", "local", "local_x"}
 
 const (
 	UNKNOWN = iota
 	REMOTE
-	LOCAL
 	REMOTE_X
+	LOCAL
 	LOCAL_X
 )
 
 // Logged user statistics
 type UsersStat struct {
 	Total      int    `json:"total"`                 // Total logged users "Local + Remote + root"
-	Local      int    `json:"local"`                 // Number of local users (excluding root)
-	Remote     int    `json:"remote"`                // Number of remote users (excluding root)
 	LocalX     int    `json:"local_x"`               // Number of users logged in X session (excluding root)
+	Local      int    `json:"local"`                 // Number of local users (excluding root)
 	RemoteX    int    `json:"remote_x"`              // Number of remote users logged in X/xrdp/vnc (excluding root)
+	Remote     int    `json:"remote"`                // Number of remote users (excluding root)
 	Unknown    int    `json:"unknown,omitempty"`     // Total number of unknown logged users (must be 0)
 	LocalRoot  bool   `json:"local_root,omitempty"`  // Local root logged
 	RemoteRoot bool   `json:"remote_root,omitempty"` // Remote root logged
@@ -133,20 +134,13 @@ func Users(fname string) ([]*User, error) {
 	return users, nil
 } // func Users()
 
-// Get logged user statistics (fname - path to utmp file)
-func GetUsersStat(fname string) (UsersStat, error) {
-	us := UsersStat{}
-
-	users, err := Users(fname)
-	if err != nil {
-		return us, err
-	}
-
+// Get logged user statistics
+func GetUsersStat(users []*User) UsersStat {
 	total := make(map[string]int)   // total logged users "Local + Remote + root"
-	local := make(map[string]int)   // local logged users (excluding root)
-	remote := make(map[string]int)  // remote logged users (excluding root)
 	localX := make(map[string]int)  // users logged in X session
+	local := make(map[string]int)   // local logged users (excluding root)
 	remoteX := make(map[string]int) // remote users logged in X/xrdp/vnc
+	remote := make(map[string]int)  // remote logged users (excluding root)
 	unknown := make(map[string]int) // unknown logged users (must be empty)
 	localRoot := false              // local root logged
 	remoteRoot := false             // remote root logged
@@ -176,12 +170,12 @@ func GetUsersStat(fname string) (UsersStat, error) {
 		}
 
 		if u.Name == "root" {
-			if t == LOCAL || t == LOCAL_X {
+			if t == LOCAL_X || t == LOCAL {
 				localRoot = true
-			} else if t == REMOTE || t == REMOTE_X {
+			} else if t == REMOTE_X || t == REMOTE {
 				remoteRoot = true
 			} else { // t == UNKNOWN
-				remoteRoot = true // unknown root as remote
+				localRoot = true // unknown root as local
 				unknown[u.Name]++
 			}
 
@@ -189,14 +183,14 @@ func GetUsersStat(fname string) (UsersStat, error) {
 				user, userType = u, t
 			}
 		} else { // regular user
-			if t == LOCAL {
-				local[u.Name]++
-			} else if t == LOCAL_X {
+			if t == LOCAL_X {
 				localX[u.Name]++
-			} else if t == REMOTE {
-				remote[u.Name]++
+			} else if t == LOCAL {
+				local[u.Name]++
 			} else if t == REMOTE_X {
 				remoteX[u.Name]++
+			} else if t == REMOTE {
+				remote[u.Name]++
 			} else { // t == UNKNOWN
 				unknown[u.Name]++
 			}
@@ -207,20 +201,29 @@ func GetUsersStat(fname string) (UsersStat, error) {
 		}
 	} // for
 
-	us.Total = len(total)
-	us.Local = len(local)
-	us.Remote = len(remote)
-	us.LocalX = len(localX)
-	us.RemoteX = len(remoteX)
-	us.Unknown = len(unknown)
-	us.LocalRoot = localRoot
-	us.RemoteRoot = remoteRoot
-	us.User = user
-	us.UserType = UserType[userType]
-	us.UserLogons = total[user.Name]
-
-	return us, nil
+	// Return result
+	return UsersStat{
+		Total:      len(total),
+		LocalX:     len(localX),
+		Local:      len(local),
+		RemoteX:    len(remoteX),
+		Remote:     len(remote),
+		Unknown:    len(unknown),
+		LocalRoot:  localRoot,
+		RemoteRoot: remoteRoot,
+		User:       user,
+		UserType:   UserType[userType],
+		UserLogons: total[user.Name]}
 } // func GetUsersStat()
+
+// Get active linux user as user.User by username (or current user)
+func ActiveUser(name string) (*user.User, error) {
+	if name != "" {
+		return user.Lookup(name)
+	} else {
+		return user.Current()
+	}
+} // func ActiveUser()
 
 // Debug print User
 func UserPrint(f *os.File, u *User) {

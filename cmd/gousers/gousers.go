@@ -97,11 +97,14 @@ func ShowUsers(fname string) {
 
 // Show logged user statistics (JSON)
 func ShowUsersStat(fname string) {
-	us, err := utmp.GetUsersStat(fname)
+	users, err := utmp.Users(fname)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: can't read utmp/wtmp/btmp file: %v\n", err)
 		os.Exit(2)
 	}
+
+	// get logged user statistics
+	us := utmp.GetUsersStat(users)
 
 	// Encode statistics to JSON
 	data, err := json.MarshalIndent(&us, "", "  ")
