@@ -244,7 +244,9 @@ func UserPrint(f *os.File, u *User) {
 	if !u.IP.Equal(net.IP{}) {
 		fmt.Fprint(f, " IP=", u.IP)
 	}
-	fmt.Fprint(f, " SID=", u.SID)
+	if u.SID != 0 {
+		fmt.Fprint(f, " SID=", u.SID)
+	}
 	fmt.Fprintln(f)
 } // func UserPrint()
 

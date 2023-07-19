@@ -143,36 +143,41 @@ func Print(f *os.File, u Utmp) {
 		if host := Str(u.Host[:]); host != "" {
 			fmt.Fprint(f, " Kernel='", host, "'")
 		}
-
-		fmt.Fprint(f, " SID=", u.Session)
-		fmt.Fprintln(f)
-		return
-	}
-
-	if u.Type == RUN_LVL { // run level
+	} else if u.Type == RUN_LVL { // run level
 		fmt.Fprint(f, " RL=", RunLvl(u.PID))
-		fmt.Fprintln(f)
-		return
+	} else {
+		if user := Str(u.User[:]); user != "" {
+			fmt.Fprint(f, " User='", user, "'")
+		}
+
+		if tty := Str(u.Line[:]); tty != "" {
+			fmt.Fprint(f, " TTY='", tty, "'")
+		}
+
+		if id := Str(u.ID[:]); id != "" {
+			fmt.Fprint(f, " ID='", id, "'")
+		}
+
+		if pid := PID(u.PID); pid != 0 {
+			fmt.Fprint(f, " PID=", pid)
+		}
+
+		if host := Str(u.Host[:]); host != "" {
+			fmt.Fprint(f, " Host='", host, "'")
+		}
+
+		if ip := IPv4(u.AddrV6); !ip.Equal(net.IP{}) {
+			fmt.Fprint(f, " IP=", ip)
+		}
 	}
 
-	if user := Str(u.User[:]); user != "" {
-		fmt.Fprint(f, " User='", user, "'")
+	if (u.Exit.Termination | u.Exit.Exit) != 0 {
+		fmt.Fprint(f, " Term/Exit=", u.Exit.Termination, "/", u.Exit.Exit)
 	}
 
-	fmt.Fprint(f, " TTY='", Str(u.Line[:]), "'")
-	fmt.Fprint(f, " ID='", Str(u.ID[:]), "'")
-	fmt.Fprint(f, " PID=", PID(u.PID))
-
-	if host := Str(u.Host[:]); host != "" {
-		fmt.Fprint(f, " Host='", host, "'")
+	if u.Session != 0 {
+		fmt.Fprint(f, " SID=", u.Session)
 	}
-
-	if ip := IPv4(u.AddrV6); !ip.Equal(net.IP{}) {
-		fmt.Fprint(f, " IP=", ip)
-	}
-
-	fmt.Fprint(f, " Term/Exit=", u.Exit.Termination, "/", u.Exit.Exit)
-	fmt.Fprint(f, " SID=", u.Session)
 
 	fmt.Fprintln(f)
 } // func Print()
