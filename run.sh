@@ -30,5 +30,9 @@ sudo bin/gousers -f /var/log/btmp dump
 #echo "Dump wtmp:"
 #bin/gousers -f /var/log/wtmp dump
 
+echo
+echo "Users stat:"
+bin/gousers stat
+
 cd "$OLD_PWD"
 

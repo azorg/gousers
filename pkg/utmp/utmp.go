@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"time"
 )
@@ -114,16 +115,16 @@ func RunLvl(pid [4]byte) string {
 } // func RunLvl()
 
 // Get IPv4 address from AddrV6
-func IPv4(addrV6 [4]int32) (IP string) {
+func IPv4(addrV6 [4]int32) net.IP {
 	ip := uint32(addrV6[0])
 	if ip != 0 {
-		b3 := (ip >> 24) & 0xFF
-		b2 := (ip >> 16) & 0xFF
-		b1 := (ip >> 8) & 0xFF
-		b0 := (ip >> 0) & 0xFF
-		IP = fmt.Sprintf("%d.%d.%d.%d", b3, b2, b1, b0)
+		b0 := byte((ip >> 0) & 0xFF)
+		b1 := byte((ip >> 8) & 0xFF)
+		b2 := byte((ip >> 16) & 0xFF)
+		b3 := byte((ip >> 24) & 0xFF)
+		return net.IPv4(b0, b1, b2, b3)
 	}
-	return
+	return net.IP{}
 } // func IPv4
 
 // Debug print Utmp
@@ -166,7 +167,7 @@ func Print(f *os.File, u Utmp) {
 		fmt.Fprint(f, " Host='", host, "'")
 	}
 
-	if ip := IPv4(u.AddrV6); ip != "" {
+	if ip := IPv4(u.AddrV6); !ip.Equal(net.IP{}) {
 		fmt.Fprint(f, " IP=", ip)
 	}
 

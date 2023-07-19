@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -22,11 +23,13 @@ Options:
 
 Commands:
   user[s] - show users is currently logged (default command)
+  stat    - show logged user statistics (JSON)
   dump    - show full dump
 
 Example:
   gousers --help                - print full help
   gousers [users]               - show users from /var/run/utmp
+  gousers stat                  - show logged user statistics
   gousers -f /var/log/btmp user - show users from /var/run/btmp
   gousers dump                  - dump /var/run/utmp
   gousers -f /var/log/wtmp dump - dump /var/log/wtmp
@@ -70,6 +73,8 @@ func main() {
 
 	if arg == "users" || arg == "user" {
 		ShowUsers(fname) // show currently logged users
+	} else if arg == "stat" {
+		ShowUsersStat(fname) // show logged user statistics (JSON)
 	} else if arg == "dump" {
 		DumpUtmp(fname) // dump utmp/wtmp/btmp file
 	} else {
@@ -89,6 +94,24 @@ func ShowUsers(fname string) {
 		utmp.UserPrint(os.Stdout, u)
 	}
 } // func ShowUsers()
+
+// Show logged user statistics (JSON)
+func ShowUsersStat(fname string) {
+	us, err := utmp.GetUsersStat(fname)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: can't read utmp/wtmp/btmp file: %v\n", err)
+		os.Exit(2)
+	}
+
+	// Encode statistics to JSON
+	data, err := json.MarshalIndent(&us, "", "  ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error: json.Marshal():", err)
+		return
+	}
+
+	fmt.Println(string(data))
+} // func ShowUsersStat()
 
 // Dump utmp/wtmp/btmp file as plain text
 func DumpUtmp(fname string) {
