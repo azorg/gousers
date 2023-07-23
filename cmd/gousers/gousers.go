@@ -7,7 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	EX "gousers/exchange"
+	"gousers/exchange"
 	"gousers/pkg/utmp"
 	"gousers/pkg/vsnotify"
 	"io"
@@ -16,7 +16,8 @@ import (
 	"time"
 )
 
-const DEBUG = false
+const DEBUG = false // log debug setting
+
 const NOTIFY_INTERVAL = 100 * time.Millisecond // FIXME: why 100 ms?
 
 // Options
@@ -82,20 +83,20 @@ func main() {
 		}
 		return func(fname string, useEUID bool) {
 			fn(fname, useEUID)
-			w, err := vsnotify.NewWatcher(fname, NOTIFY_INTERVAL)
+			n, err := vsnotify.New(fname, NOTIFY_INTERVAL)
 			if err != nil {
 				log.Fatalf("fatal: %v", err)
 			}
 			for run := true; run; {
 				select {
-				case <-w.Evt():
+				case <-n.Update:
 					fmt.Println()
 					fn(fname, useEUID)
 				case <-CtrlC:
 					run = false
 				}
 			}
-			w.Close()
+			n.Cancel()
 		}
 	}
 
@@ -152,14 +153,14 @@ func ShowUser(fname, username string, useEUID bool) {
 	}
 
 	// Repack utmp.UserFull to exchange.User
-	u := EX.User{
+	u := exchange.User{
 		Name:        uf.Name,
 		UID:         uf.UID,
 		GID:         uf.GID,
 		DisplayName: uf.DisplayName,
 		HomeDir:     uf.HomeDir,
 		Groups:      uf.Groups,
-		LogonType:   EX.LogonType[uf.Type],
+		LogonType:   exchange.LogonType[uf.Type],
 		LogonTime:   uf.Time,
 		Logons:      uf.Logons}
 

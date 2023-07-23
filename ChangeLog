@@ -2,6 +2,7 @@
  + show user full info
  + Update username by effective UID by PID
  + add option -noeuid for wtmp/btmp
+ * update pkg/notify
 
 2023.07.20
  + notify mode

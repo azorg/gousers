@@ -9,29 +9,28 @@ import (
 	"log"
 	"os"
 	"time"
+  "sync"
 )
 
-const DEBUG = true
+var DEBUG = true // debug output to log on terminate
 
-type Watcher interface {
-	Evt() <-chan time.Time // return modification file time
-	Close()                // terminate watcher
+type Notify struct {
+	Update chan time.Time // return modification file time
+	Cancel func()         // terminate notifier
 }
 
-type Watch struct {
-	updt chan time.Time
-	done chan bool
-}
-
-func NewWatcher(filePath string, period time.Duration) (Watcher, error) {
+// Create new file change notifier
+func New(filePath string, period time.Duration) (*Notify, error) {
 	stat, err := os.Stat(filePath)
 	if err != nil {
 		return nil, err
 	}
 
-	var w Watch
-	w.updt = make(chan time.Time)
-	w.done = make(chan bool)
+  var n Notify
+  n.Update = make(chan time.Time)
+  cancel := make(chan struct{})
+  var wg sync.WaitGroup
+  wg.Add(1)
 
 	go func() {
 		var pstat os.FileInfo
@@ -45,35 +44,29 @@ func NewWatcher(filePath string, period time.Duration) (Watcher, error) {
 
 			if pstat != nil {
 				if stat.Size() != pstat.Size() || stat.ModTime() != pstat.ModTime() {
-					w.updt <- stat.ModTime() // file updated
+					n.Update <- stat.ModTime() // file updated
 				}
 			}
 
 			select {
 			case <-tick:
-			case <-w.done:
+			case <-cancel:
 				stop = true
 			}
 		}
-		if DEBUG {
-			log.Printf("Watcher(%s) done", filePath)
-		}
-		close(w.updt)
+		close(n.Update)
+    wg.Done()
 	}()
 
-	return &w, nil
-}
+  n.Cancel = func() {
+		close(cancel)
+    wg.Wait()
+		if DEBUG {
+			log.Printf("vsnotifier(%s) done", filePath)
+		}
+  }
 
-// Get chanel to select update file time
-func (w *Watch) Evt() <-chan time.Time {
-	return w.updt
-}
-
-// Close file watcher
-func (w *Watch) Close() {
-	if w != nil {
-		close(w.done)
-	}
+	return &n, nil
 }
 
 // EOF: "vsnotify.go"
