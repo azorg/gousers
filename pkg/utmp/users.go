@@ -342,7 +342,14 @@ func UserPrint(f *os.File, u *User) {
 	if u.ID != "" {
 		fmt.Fprint(f, " ID='", u.ID, "'")
 	}
+
 	fmt.Fprint(f, " PID=", u.PID)
+
+	cmd, err := GetCmdline(u.PID)
+	if err == nil {
+		fmt.Fprint(f, " Cmd='", cmd, "'")
+	}
+
 	if u.Host != "" {
 		fmt.Fprint(f, " Host='", u.Host, "'")
 	}

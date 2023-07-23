@@ -177,6 +177,11 @@ func Print(f *os.File, u Utmp) {
 		if ip := IPv4(u.AddrV6); !ip.Equal(net.IP{}) {
 			fmt.Fprint(f, " IP=", ip)
 		}
+
+		cmd, err := GetCmdline(pid)
+		if err == nil {
+			fmt.Fprint(f, " Cmd='", cmd, "'")
+		}
 	}
 
 	if (u.Exit.Termination | u.Exit.Exit) != 0 {

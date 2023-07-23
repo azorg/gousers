@@ -1,9 +1,10 @@
-// File "euid.go"
+// File "proc.go"
 
 package utmp
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"os"
 	"strconv"
@@ -32,4 +33,16 @@ func GetEUID(pid uint32) (int, error) {
 	return 0, fmt.Errorf(`can't find "^Uid: " in %s`, file)
 }
 
-// EOF: "euid.go"
+// Get CmdLine by PID
+func GetCmdline(pid uint32) (string, error) {
+	file := fmt.Sprintf("/proc/%d/cmdline", pid)
+	cmd, err := os.ReadFile(file)
+	if err != nil {
+		return "", err
+	}
+	cmd = bytes.TrimRight(cmd, string([]byte{0}))
+	cmd = bytes.ReplaceAll(cmd, []byte{0}, []byte(" "))
+	return string(cmd), nil
+}
+
+// EOF: "proc.go"
