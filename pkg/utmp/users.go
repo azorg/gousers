@@ -11,13 +11,14 @@ import (
 	"os/user"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// User structure delivered from Utmp
+// User structure delivered from Utmp (as-is)
 type User struct {
-	Name string    `json:"name"`           // Username
+	Name string    `json:"name"`           // Username is the login name
 	PID  uint32    `json:"pid,omitempty"`  // Process ID
 	TTY  string    `json:"tty,omitempty"`  // TTY device
 	Host string    `json:"host,omitempty"` // Login from
@@ -25,9 +26,9 @@ type User struct {
 	SID  int32     `json:"sid,omitempty"`  // Session ID
 	ID   string    `json:"id,omitempty"`   // Terminal name suffix
 	Time time.Time `json:"time,omitempty"` // Time
-} // type User
+}
 
-// Type of active logged user (5 types)
+// Type of logged user (5 types)
 var UserType = [...]string{"", "remote", "remote_x", "local", "local_x"}
 
 const (
@@ -38,15 +39,28 @@ const (
 	LOCAL_X
 )
 
-// Full user information about user
+// Logged user metrics
+type UserLogon struct {
+	Type   int       `json:"type,omitempty"`   // Type of logon: 0..5: unknown..local_x
+	Time   time.Time `json:"time,omitempty"`   // Last logon time
+	Logons int       `json:"logons,omitempty"` // Number of user logons
+}
+
+// User information delivered from user.User
 type UserInfo struct {
-	UID         string `json:"uid"`                    // User ID
-	GID         string `json:"gid"`                    // Primary group ID
 	Name        string `json:"name"`                   // Username is the login name
+	UID         string `json:"uid,omitempty"`          // User ID
+	GID         string `json:"gid,omitempty"`          // Primary group ID
 	DisplayName string `json:"display_name,omitempty"` // User display name (may be empty)
 	HomeDir     string `json:"home_dir,omitempty"`     // User's home directory
 	Groups      string `json:"groups,omitempty"`       // Groups that the user is a member of (CSV)
-} // type UserInfo
+}
+
+// Full user information (equivalent of export.User)
+type UserFull struct {
+	UserInfo
+	UserLogon
+}
 
 // Logged user statistics
 type UsersStat struct {
@@ -58,16 +72,13 @@ type UsersStat struct {
 	Unknown    int       `json:"unknown,omitempty"`     // Total number of unknown logged users (must be 0)
 	LocalRoot  bool      `json:"local_root,omitempty"`  // Local root logged
 	RemoteRoot bool      `json:"remote_root,omitempty"` // Remote root logged
-	UserType   string    `json:"user_type,omitempty"`   // Type of active user
-	UserLogons int       `json:"user_logons,omitempty"` // Number of active user logons
-	User       *User     `json:"user,omitempty"`        // Active user on host or nil
-	UserInfo   *UserInfo `json:"user_info,omitempty"`   // Information about active user or nil
-} // type UsersStat
+	User       *UserFull `json:"user_,omitempty"`       // Information about active user or nil
+}
 
 type userTTY struct {
 	User string // User name
 	TTY  string // TTY device
-} // type userTTY
+}
 
 // UsersByTime implements sort.Interface for []*User based on the Time field
 type UsersByTime []*User
@@ -75,6 +86,20 @@ type UsersByTime []*User
 func (u UsersByTime) Len() int           { return len(u) }
 func (u UsersByTime) Swap(i, j int)      { u[i], u[j] = u[j], u[i] }
 func (u UsersByTime) Less(i, j int) bool { return u[i].Time.Before(u[j].Time) }
+
+// Get effective username by PID
+func GetUserByPID(pid uint32) (string, error) {
+	euid, err := GetEUID(pid)
+	if err != nil {
+		return "", err
+	}
+
+	u, err := user.LookupId(strconv.Itoa(euid))
+	if err != nil {
+		return "", err
+	}
+	return u.Username, nil
+}
 
 // Get users currently logged in to the current host (fname - path to utmp file)
 func Users(fname string) ([]*User, error) {
@@ -85,7 +110,7 @@ func Users(fname string) ([]*User, error) {
 	// Open utmp/wtmp/btmp file
 	f, err := os.Open(fname)
 	if err != nil {
-		return []*User{}, err
+		return []*User{}, err // can't open file
 	}
 	defer f.Close()
 
@@ -105,16 +130,26 @@ func Users(fname string) ([]*User, error) {
 
 		Type := int(u.Type)
 		if Type == USER_PROCESS || Type == DEAD_PROCESS { // type 7 or 8
-			tty := Str(u.Line[:])
 			user := Str(u.User[:])
+			pid := PID(u.PID)
+			tty := Str(u.Line[:])
 			ut := userTTY{user, tty}
 			p, ok := base[ut]
 
 			if Type == USER_PROCESS { // user login
+				// Update real username by effective UID(pid)
+				realUser, err := GetUserByPID(pid)
+				if err == nil {
+					user = realUser
+				} else {
+					// Do not show error (may read wtmp/btmp)
+					// log.Printf("error: %v", err)
+				}
+
 				nu := User{
-					Name: Str(u.User[:]),
-					PID:  PID(u.PID),
-					TTY:  Str(u.Line[:]),
+					Name: user,
+					PID:  pid,
+					TTY:  tty,
 					Host: Str(u.Host[:]),
 					IP:   IPv4(u.AddrV6),
 					SID:  u.Session,
@@ -146,11 +181,47 @@ func Users(fname string) ([]*User, error) {
 	return users, nil
 } // func Users()
 
-// Get user info by username
+// Get user logon type (0...5)
+func GetUserType(u *User) int {
+	reX := regexp.MustCompile("^:[0-9]+$") // user logged to X
+	msX := reX.MatchString
+
+	t := UNKNOWN
+	if msX(u.Host) || msX(u.ID) || msX(u.TTY) { // e.g. ":1"
+		if u.IP.Equal(net.IP{}) { // IP is empty
+			t = LOCAL_X
+		} else {
+			t = REMOTE_X // FIXME: bad code, fix it later
+		}
+	} else {
+		if u.IP.Equal(net.IP{}) && u.Host == "" { // IP and Host is empty
+			t = LOCAL
+		} else {
+			t = REMOTE
+		}
+	}
+	return t
+}
+
+// Get user logon info by username
+func GetUserLogon(users []*User, name string) (ul UserLogon) {
+	for _, u := range users {
+		if u.Name == name {
+			ul.Logons++ // count number of logons
+			if t := GetUserType(u); ul.Type < t {
+				ul.Type = t // fix max
+				ul.Time = u.Time
+			}
+		}
+	}
+	return ul
+}
+
+// Get user info by username delivered from user.User
 func GetUserInfo(username string) (info *UserInfo, err error) {
 	u, err := user.Lookup(username)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	info = &UserInfo{
@@ -163,7 +234,7 @@ func GetUserInfo(username string) (info *UserInfo, err error) {
 	// Find groups that the user is a member of
 	gids, err := u.GroupIds()
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	var groups []string
@@ -176,8 +247,20 @@ func GetUserInfo(username string) (info *UserInfo, err error) {
 	}
 
 	info.Groups = strings.Join(groups, ",")
-	return
+	return info, nil
 } // func GetUserInfo()
+
+// Fill full user information
+func GetUserFull(users []*User, name string) (*UserFull, error) {
+	info, err := GetUserInfo(name)
+	if err != nil {
+		return nil, err
+	}
+	ul := GetUserLogon(users, name)
+	return &UserFull{
+		UserInfo:  *info,
+		UserLogon: ul}, nil
+}
 
 // Get logged user statistics
 func GetUsersStat(users []*User) UsersStat {
@@ -192,27 +275,9 @@ func GetUsersStat(users []*User) UsersStat {
 	user := (*User)(nil)            // main active user on host or nil
 	userType := UNKNOWN             // type of active user
 
-	reX := regexp.MustCompile("^:[0-9]+$") // user logged to X
-	msX := reX.MatchString
-
 	for _, u := range users {
 		total[u.Name]++
-
-		// Determinate user type
-		t := UNKNOWN
-		if msX(u.Host) || msX(u.ID) || msX(u.TTY) { // e.g. ":1"
-			if u.IP.Equal(net.IP{}) { // IP is empty
-				t = LOCAL_X
-			} else {
-				t = REMOTE_X // FIXME: bad code, fix it later
-			}
-		} else {
-			if u.IP.Equal(net.IP{}) && u.Host == "" { // IP and Host is empty
-				t = LOCAL
-			} else {
-				t = REMOTE
-			}
-		}
+		t := GetUserType(u) // determinate user type
 
 		if u.Name == "root" {
 			switch t {
@@ -248,7 +313,7 @@ func GetUsersStat(users []*User) UsersStat {
 		}
 	} // for
 
-	userInfo, _ := GetUserInfo(user.Name)
+	full, _ := GetUserFull(users, user.Name)
 
 	// Return result
 	return UsersStat{
@@ -260,10 +325,7 @@ func GetUsersStat(users []*User) UsersStat {
 		Unknown:    len(unknown),
 		LocalRoot:  localRoot,
 		RemoteRoot: remoteRoot,
-		UserType:   UserType[userType],
-		UserLogons: total[user.Name],
-		User:       user,
-		UserInfo:   userInfo}
+		User:       full}
 } // func GetUsersStat()
 
 // Debug print User
@@ -289,6 +351,6 @@ func UserPrint(f *os.File, u *User) {
 		fmt.Fprint(f, " SID=", u.SID)
 	}
 	fmt.Fprintln(f)
-} // func UserPrint()
+}
 
 // EOF: "users.go"

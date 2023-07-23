@@ -1,7 +1,15 @@
+2023.07.23
+ + show user full info
+ + Update username by effective UID by PID
+
+2023.07.20
+ + notify mode
+ + "log.go"
+ + "signal.go"
+
 2023.07.19
  * start project
  + add README.md
  * fix date/time format
  + add net.IP usage
  + add utmp.UsersStat and `stat` command
- + add UserInfo to UserStat

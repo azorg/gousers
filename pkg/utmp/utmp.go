@@ -40,7 +40,7 @@ var TypeString = [...]string{
 	"USER_PROC",  // 7
 	"DEAD_PROC",  // 8
 	"ACCOUNTING", // 9
-} // TypeString
+}
 
 // Magic sizes of Utmp fields
 const (
@@ -63,24 +63,24 @@ type Utmp struct {
 	TV          TimeVal        // Time entry was made
 	AddrV6      [4]int32       // IP address of remote host (IPv4 address uses just AddrV6[0])
 	Pad1_unused [20]int8       // Reserved for future use
-} // type Utmp
+}
 
 // Type of exit status
 type ExitStatus struct {
 	Termination int16 // Process termination status
 	Exit        int16 // Process exit status
-} // type ExitStatus
+}
 
 // Type of time entry
 type TimeVal struct {
 	Sec  int32 // Seconds
 	Usec int32 // Microseconds
-} // type TimeVal
+}
 
 // Read one record of Utmp from binary file
 func Read(file io.Reader, utmp *Utmp) error {
 	return binary.Read(file, binary.LittleEndian, utmp)
-} // func Read()
+}
 
 // Convert Utmp chars to string
 func Str(src []int8) string {
@@ -92,17 +92,17 @@ func Str(src []int8) string {
 		b = append(b, byte(v))
 	}
 	return string(b)
-} // func Str()
+}
 
 // Convert time stamp to Unix time
 func Time(tv TimeVal) time.Time {
 	return time.Unix(int64(tv.Sec), int64(tv.Usec)*1000) // usec -> nsec
-} // func Time()
+}
 
 // Get PID from Utmp
 func PID(pid [4]byte) uint32 {
 	return binary.LittleEndian.Uint32(pid[:])
-} // func PID()
+}
 
 // Get RunLevel from Utmp
 func RunLvl(pid [4]byte) string {
@@ -112,7 +112,7 @@ func RunLvl(pid [4]byte) string {
 	} else {
 		return fmt.Sprintf("0x%02X", b)
 	}
-} // func RunLvl()
+}
 
 // Get IPv4 address from AddrV6
 func IPv4(addrV6 [4]int32) net.IP {
@@ -125,7 +125,7 @@ func IPv4(addrV6 [4]int32) net.IP {
 		return net.IPv4(b0, b1, b2, b3)
 	}
 	return net.IP{}
-} // func IPv4
+}
 
 // Debug print Utmp
 func Print(f *os.File, u Utmp) {
