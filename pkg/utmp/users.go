@@ -72,7 +72,7 @@ type UsersStat struct {
 	Unknown    int       `json:"unknown,omitempty"`     // Total number of unknown logged users (must be 0)
 	LocalRoot  bool      `json:"local_root,omitempty"`  // Local root logged
 	RemoteRoot bool      `json:"remote_root,omitempty"` // Remote root logged
-	User       *UserFull `json:"user_,omitempty"`       // Information about active user or nil
+	User       *UserFull `json:"user,omitempty"`        // Information about active user or nil
 }
 
 type userTTY struct {
