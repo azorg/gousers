@@ -19,6 +19,13 @@ import (
 const DEBUG = false
 const NOTIFY_INTERVAL = 100 * time.Millisecond // FIXME: why 100 ms?
 
+// Options
+var (
+	Notify = false
+	NoEUID = false
+	File   = utmp.DefaultFile // "/var/run/utmp"
+)
+
 func Usage() {
 	fmt.Print(`gousers - simple dump for utmp/wtmp/btmp linux files
 Usage: gousers [options] [command]
@@ -26,8 +33,9 @@ Usage: gousers [options] [command]
 Options:
   -help|--help - print full help
   -h|--h       - print help about options only
-  -f <file>    - use a specific file instead of /var/run/utmp
-  -n           - notify mode (Ctrl+C to stop)
+  -file <file> - use a specific file instead of /var/run/utmp
+  -notify      - notify mode (Ctrl+C to stop)
+  -noeuid      - don't use EUID (for wtmp/btmp)
 
 Commands:
   user[s]         - show users is currently logged (default command)
@@ -36,22 +44,18 @@ Commands:
   stat            - show logged user statistics (JSON)
 
 Example:
-  gousers --help                - print full help
-  gousers [users]               - show users from /var/run/utmp
-  gousers dump                  - dump /var/run/utmp
-  gousers info alice            - show full information about user alice
-  gousers stat                  - show logged user statistics
-  gousers -f /var/log/btmp user - show users from /var/run/btmp
-  gousers -f /var/log/wtmp dump - dump /var/log/wtmp
+  gousers --help                           - print full help
+  gousers [users]                          - show users from /var/run/utmp
+  gousers dump                             - dump /var/run/utmp
+  gousers info alice                       - show full information about user alice
+  gousers stat                             - show logged user statistics
+  gousers -file /var/log/btmp -noeuid user - show users from /var/run/btmp
+  gousers -file /var/log/wtmp -noeuid dump - dump /var/log/wtmp
 `)
 	os.Exit(0)
 } // func Usage()
 
 func main() {
-	// Options
-	fname := utmp.DefaultFile // "/var/run/utmp"
-	notify := false
-
 	// Check --help or -help options
 	for _, opt := range os.Args[1:] {
 		if opt == "-help" || opt == "--help" {
@@ -62,8 +66,9 @@ func main() {
 	}
 
 	// Parse options (flags)
-	flag.StringVar(&fname, "f", fname, "Input utmp/wtmp/btmp file")
-	flag.BoolVar(&notify, "n", notify, "Notify mode (users/stat)")
+	flag.StringVar(&File, "file", File, "Input utmp/wtmp/btmp file")
+	flag.BoolVar(&Notify, "notify", Notify, "Notify mode (Ctrl+C to stop)")
+	flag.BoolVar(&NoEUID, "noeuid", NoEUID, "don't use EUID (for wtmp/btmp)")
 	flag.Parse()
 
 	// Parse commands
@@ -71,12 +76,12 @@ func main() {
 	argc := len(args)
 
 	// Define notify runner closure function
-	runer := func(fn func(fname string)) func(string) {
-		if !notify {
+	runer := func(fn func(fname string, useEUID bool)) func(string, bool) {
+		if !Notify {
 			return fn
 		}
-		return func(fname string) {
-			fn(fname)
+		return func(fname string, useEUID bool) {
+			fn(fname, useEUID)
 			w, err := vsnotify.NewWatcher(fname, NOTIFY_INTERVAL)
 			if err != nil {
 				log.Fatalf("fatal: %v", err)
@@ -85,7 +90,7 @@ func main() {
 				select {
 				case <-w.Evt():
 					fmt.Println()
-					fn(fname)
+					fn(fname, useEUID)
 				case <-CtrlC:
 					run = false
 				}
@@ -95,24 +100,24 @@ func main() {
 	}
 
 	if argc == 0 { // show currently logged users by default
-		runer(ShowUsers)(fname) // #1
+		runer(ShowUsers)(File, !NoEUID) // #1
 		return
 	}
 
 	arg := args[0]
 
 	if arg == "users" || arg == "user" { // show currently logged users
-		runer(ShowUsers)(fname) // #2
+		runer(ShowUsers)(File, !NoEUID) // #2
 	} else if arg == "info" { // show full information about user by username (JSON)
 		if argc < 2 {
 			log.Fatalf("fatal: no user selected (run with --help option)")
 		} else {
-			ShowUser(fname, args[1])
+			ShowUser(File, args[1], !NoEUID)
 		}
 	} else if arg == "stat" { // show logged user statistics (JSON)
-		runer(ShowUsersStat)(fname)
+		runer(ShowUsersStat)(File, !NoEUID)
 	} else if arg == "dump" { // dump utmp/wtmp/btmp file
-		DumpUtmp(fname, notify)
+		DumpUtmp(File, Notify)
 	} else { // show error and exit if command is unknown
 		fmt.Fprintf(os.Stderr, "error: unknown command '%s' (run with --help option)\n", arg)
 		os.Exit(1)
@@ -120,8 +125,8 @@ func main() {
 } // func main()
 
 // Show active users from utmp/wtmp/btmp file
-func ShowUsers(fname string) {
-	users, err := utmp.Users(fname)
+func ShowUsers(fname string, useEUID bool) {
+	users, err := utmp.Users(fname, useEUID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: can't read utmp/wtmp/btmp file: %v\n", err)
 		os.Exit(2)
@@ -133,8 +138,8 @@ func ShowUsers(fname string) {
 }
 
 // Show Full user info
-func ShowUser(fname, username string) {
-	users, err := utmp.Users(fname)
+func ShowUser(fname, username string, useEUID bool) {
+	users, err := utmp.Users(fname, useEUID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: can't read utmp/wtmp/btmp file: %v\n", err)
 		os.Exit(2)
@@ -169,8 +174,8 @@ func ShowUser(fname, username string) {
 }
 
 // Show logged user statistics (JSON)
-func ShowUsersStat(fname string) {
-	users, err := utmp.Users(fname)
+func ShowUsersStat(fname string, useEUID bool) {
+	users, err := utmp.Users(fname, useEUID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: can't read utmp/wtmp/btmp file: %v\n", err)
 		os.Exit(2)

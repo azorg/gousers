@@ -146,7 +146,9 @@ func Print(f *os.File, u Utmp) {
 	} else if u.Type == RUN_LVL { // run level
 		fmt.Fprint(f, " RL=", RunLvl(u.PID))
 	} else {
-		if user := Str(u.User[:]); user != "" {
+		user := Str(u.User[:])
+
+		if user != "" {
 			fmt.Fprint(f, " User='", user, "'")
 		}
 
@@ -158,8 +160,14 @@ func Print(f *os.File, u Utmp) {
 			fmt.Fprint(f, " ID='", id, "'")
 		}
 
-		if pid := PID(u.PID); pid != 0 {
+		pid := PID(u.PID)
+		if pid != 0 {
 			fmt.Fprint(f, " PID=", pid)
+		}
+
+		euid, err := GetEUID(pid)
+		if err == nil {
+			fmt.Fprint(f, " EUID=", euid)
 		}
 
 		if host := Str(u.Host[:]); host != "" {

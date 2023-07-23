@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-// User structure delivered from Utmp (as-is)
+// User structure delivered from Utmp (as-is + updated Name by EUID(PID))
 type User struct {
 	Name string    `json:"name"`           // Username is the login name
 	PID  uint32    `json:"pid,omitempty"`  // Process ID
@@ -102,7 +102,7 @@ func GetUserByPID(pid uint32) (string, error) {
 }
 
 // Get users currently logged in to the current host (fname - path to utmp file)
-func Users(fname string) ([]*User, error) {
+func Users(fname string, useEUID bool) ([]*User, error) {
 	if fname == "" {
 		fname = DefaultFile
 	}
@@ -137,13 +137,15 @@ func Users(fname string) ([]*User, error) {
 			p, ok := base[ut]
 
 			if Type == USER_PROCESS { // user login
-				// Update real username by effective UID(pid)
-				realUser, err := GetUserByPID(pid)
-				if err == nil {
-					user = realUser
-				} else {
-					// Do not show error (may read wtmp/btmp)
-					// log.Printf("error: %v", err)
+				if useEUID {
+					// Get real username by effective UID(pid)
+					realUser, err := GetUserByPID(pid)
+					if err == nil {
+						user = realUser
+					} else {
+						// Do not show error (may read wtmp/btmp)
+						// log.Printf("error: %v", err)
+					}
 				}
 
 				nu := User{
@@ -332,7 +334,7 @@ func GetUsersStat(users []*User) UsersStat {
 func UserPrint(f *os.File, u *User) {
 	fmt.Fprint(f, u.Time.Format("2006-01-02 15:04:05"))
 	if u.Name != "" {
-		fmt.Fprint(f, " User='", u.Name, "'")
+		fmt.Fprint(f, " Name='", u.Name, "'")
 	}
 	if u.TTY != "" {
 		fmt.Fprint(f, " TTY='", u.TTY, "'")
