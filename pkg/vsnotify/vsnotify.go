@@ -1,22 +1,19 @@
-/*
-Package vsnotify implement Very Simply file change notifier.
-
-File: "vsnotify.go"
-*/
+// Package vsnotify implement Very Simply file change notifier.
+// File: "vsnotify.go"
 package vsnotify
 
 import (
 	"log"
 	"os"
+	"sync"
 	"time"
-  "sync"
 )
 
 var DEBUG = true // debug output to log on terminate
 
 type Notify struct {
-	Update chan time.Time // return modification file time
-	Cancel func()         // terminate notifier
+	Update <-chan time.Time // return modification file time
+	Cancel func()           // terminate notifier
 }
 
 // Create new file change notifier
@@ -26,11 +23,10 @@ func New(filePath string, period time.Duration) (*Notify, error) {
 		return nil, err
 	}
 
-  var n Notify
-  n.Update = make(chan time.Time)
-  cancel := make(chan struct{})
-  var wg sync.WaitGroup
-  wg.Add(1)
+	update := make(chan time.Time)
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
 
 	go func() {
 		var pstat os.FileInfo
@@ -44,29 +40,29 @@ func New(filePath string, period time.Duration) (*Notify, error) {
 
 			if pstat != nil {
 				if stat.Size() != pstat.Size() || stat.ModTime() != pstat.ModTime() {
-					n.Update <- stat.ModTime() // file updated
+					update <- stat.ModTime() // file updated
 				}
 			}
 
 			select {
 			case <-tick:
-			case <-cancel:
+			case <-done:
 				stop = true
 			}
 		}
-		close(n.Update)
-    wg.Done()
+		close(update)
+		wg.Done()
 	}()
 
-  n.Cancel = func() {
-		close(cancel)
-    wg.Wait()
+	cancel := func() {
+		close(done)
+		wg.Wait()
 		if DEBUG {
 			log.Printf("vsnotifier(%s) done", filePath)
 		}
-  }
+	}
 
-	return &n, nil
+	return &Notify{update, cancel}, nil
 }
 
 // EOF: "vsnotify.go"
