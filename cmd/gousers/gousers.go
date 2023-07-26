@@ -43,6 +43,7 @@ Commands:
   dump            - show full dump
   info <username> - show full information about user by username (JSON)
   stat            - show logged user statistics (JSON)
+  monitor         - login/logout monitor
 
 Example:
   gousers --help                           - print full help
@@ -119,6 +120,8 @@ func main() {
 		runer(ShowUsersStat)(File, !NoEUID)
 	} else if arg == "dump" { // dump utmp/wtmp/btmp file
 		DumpUtmp(File, Notify)
+	} else if arg == "monitor" { // login/logout monitor
+		Monitor(File, !NoEUID)
 	} else { // show error and exit if command is unknown
 		fmt.Fprintf(os.Stderr, "error: unknown command '%s' (run with --help option)\n", arg)
 		os.Exit(1)
@@ -227,5 +230,40 @@ func DumpUtmp(fname string, notify bool) {
 		utmp.Print(os.Stdout, u)
 	} // for
 } // func DumpUtmp
+
+// Login/logout monitor
+func Monitor(fname string, useEUID bool) {
+	n, err := utmp.NewNotify(fname, useEUID, NOTIFY_INTERVAL)
+	if err != nil {
+		log.Fatalf("fatal: %v", err)
+	}
+
+	for run := true; run; {
+		select {
+		case evt := <-n.Update:
+			if len(evt.Login) != 0 {
+				fmt.Printf(evt.Time.Format("2006-01-02 15:04:05"))
+				fmt.Printf(" login:")
+				for _, ut := range evt.Login {
+					fmt.Printf(" %s[%s]", ut.User, ut.TTY)
+				}
+				fmt.Println()
+			}
+
+			if len(evt.Logout) != 0 {
+				fmt.Printf(evt.Time.Format("2006-01-02 15:04:05"))
+				fmt.Printf(" logout:")
+				for _, ut := range evt.Logout {
+					fmt.Printf(" %s[%s]", ut.User, ut.TTY)
+				}
+				fmt.Println()
+			}
+
+		case <-CtrlC:
+			run = false
+		}
+	}
+	n.Cancel()
+} // func Monitor()
 
 // EOF: "gousers.go"

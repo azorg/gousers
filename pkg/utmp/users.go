@@ -75,7 +75,7 @@ type UsersStat struct {
 	User       *UserFull `json:"user,omitempty"`        // Information about active user or nil
 }
 
-type userTTY struct {
+type UserTTY struct {
 	User string // User name
 	TTY  string // TTY device
 }
@@ -114,7 +114,7 @@ func Users(fname string, useEUID bool) ([]*User, error) {
 	}
 	defer f.Close()
 
-	base := make(map[userTTY]*User)
+	base := make(map[UserTTY]*User)
 
 	// Read utmp/wtmp/btmp file
 	for {
@@ -133,7 +133,7 @@ func Users(fname string, useEUID bool) ([]*User, error) {
 			user := Str(u.User[:])
 			pid := PID(u.PID)
 			tty := Str(u.Line[:])
-			ut := userTTY{user, tty}
+			ut := UserTTY{user, tty}
 			p, ok := base[ut]
 
 			if Type == USER_PROCESS { // user login

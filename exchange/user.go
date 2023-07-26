@@ -23,7 +23,9 @@ var LogonType = [...]string{"", "remote", "remote_x", "local", "local_x"}
 //	`remote_x` - удаленный пользователель графической подсистемы;
 //	`remote` -  удаленный пользователь (ssh).
 //
-// Поле `Logons` указывает общее число входой пользовтаеля в систему (число
+// Поле `LogonTime` содержит время последнего входа данного пользователя в систему.
+//
+// Поле `Logons` указывает общее число входов пользовтаеля в систему (число
 // окрытых сеансов X-window, число открытых виртуальных консолей и т.п.).
 type User struct {
 	Name        string    `json:"name"`                   // Username is the login name (unuq Security ID)
@@ -35,6 +37,20 @@ type User struct {
 	LogonType   string    `json:"logon_type,omitempty"`   // Type of logon of user: remote, remote_x, local, local_x
 	LogonTime   time.Time `json:"logon_time,omitempty"`   // Last logon time
 	Logons      int       `json:"logons,omitempty"`       // Number of user logons (local+remote) >=1
+}
+
+// Logged user statistics.
+// Описание статистики логинов и идентификатор ГЛАВНОГО пользователя сеанса.
+type UsersStat struct {
+	Total      int    `json:"total"`                 // Total logged users "Local + Remote + root"
+	LocalX     int    `json:"local_x"`               // Number of users logged in X session (excluding root)
+	Local      int    `json:"local"`                 // Number of local users (excluding root)
+	RemoteX    int    `json:"remote_x"`              // Number of remote users logged in X/xrdp/vnc (excluding root)
+	Remote     int    `json:"remote"`                // Number of remote users (excluding root)
+	Unknown    int    `json:"unknown,omitempty"`     // Total number of unknown logged users (must be 0)
+	LocalRoot  bool   `json:"local_root,omitempty"`  // Local root logged
+	RemoteRoot bool   `json:"remote_root,omitempty"` // Remote root logged
+	ActiveUser string `json:"active_user,omitempty"` // Information about active user or ""
 }
 
 // EOF: "user.go"

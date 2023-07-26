@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-var DEBUG = true // debug output to log on terminate
+var DEBUG = false // debug output to log on terminate
 
 type Notify struct {
 	Update <-chan time.Time // return modification file time

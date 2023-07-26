@@ -1,5 +1,5 @@
 [-] add support and test 32-bit platform
 [+] add user statistics
 [+] add analyzes of real UID, EUID of logon process
-[+] добавить компонент отслеживания логинов в реальном времени (notify)
 [+] добавить статистику входов для одного пользователя
+[+] добавить компонент отслеживания логинов в реальном времени (notify)

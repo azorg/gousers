@@ -20,6 +20,5 @@ $ sudo make uninstall
 ## Help
 ```
 $ gousers --help
-gousers - simple dump for utmp/wtmp/btmp linux files
 ```
 
