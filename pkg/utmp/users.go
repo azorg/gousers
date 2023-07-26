@@ -101,6 +101,28 @@ func GetUserByPID(pid uint32) (string, error) {
 	return u.Username, nil
 }
 
+// Get user logon type (0...5)
+func GetUserType(u *User) int {
+	reX := regexp.MustCompile("^:[0-9]+$") // user logged to X
+	msX := reX.MatchString
+
+	t := UNKNOWN
+	if msX(u.Host) || msX(u.ID) || msX(u.TTY) { // e.g. ":1"
+		if u.IP.Equal(net.IP{}) { // IP is empty
+			t = LOCAL_X
+		} else {
+			t = REMOTE_X // FIXME: bad code, fix it later
+		}
+	} else {
+		if u.IP.Equal(net.IP{}) && u.Host == "" { // IP and Host is empty
+			t = LOCAL
+		} else {
+			t = REMOTE
+		}
+	}
+	return t
+}
+
 // Get users currently logged in to the current host (fname - path to utmp file)
 func Users(fname string, useEUID bool) ([]*User, error) {
 	if fname == "" {
@@ -137,17 +159,6 @@ func Users(fname string, useEUID bool) ([]*User, error) {
 			p, ok := base[ut]
 
 			if Type == USER_PROCESS { // user login
-				if useEUID {
-					// Get real username by effective UID(pid)
-					realUser, err := GetUserByPID(pid)
-					if err == nil {
-						user = realUser
-					} else {
-						// Do not show error (may read wtmp/btmp)
-						// log.Printf("error: %v", err)
-					}
-				}
-
 				nu := User{
 					Name: user,
 					PID:  pid,
@@ -157,6 +168,18 @@ func Users(fname string, useEUID bool) ([]*User, error) {
 					SID:  u.Session,
 					ID:   Str(u.ID[:]),
 					Time: Time(u.TV),
+				}
+
+				userType := GetUserType(&nu)
+				if userType == LOCAL && useEUID { // FIXME: some magic condition
+					// Get real username by effective UID(pid)
+					user, err := GetUserByPID(pid)
+					if err == nil {
+						nu.Name = user
+					} else {
+						// Do not show error (may read wtmp/btmp)
+						// log.Printf("error: %v", err)
+					}
 				}
 
 				if ok {
@@ -182,28 +205,6 @@ func Users(fname string, useEUID bool) ([]*User, error) {
 	sort.Sort(UsersByTime(users))
 	return users, nil
 } // func Users()
-
-// Get user logon type (0...5)
-func GetUserType(u *User) int {
-	reX := regexp.MustCompile("^:[0-9]+$") // user logged to X
-	msX := reX.MatchString
-
-	t := UNKNOWN
-	if msX(u.Host) || msX(u.ID) || msX(u.TTY) { // e.g. ":1"
-		if u.IP.Equal(net.IP{}) { // IP is empty
-			t = LOCAL_X
-		} else {
-			t = REMOTE_X // FIXME: bad code, fix it later
-		}
-	} else {
-		if u.IP.Equal(net.IP{}) && u.Host == "" { // IP and Host is empty
-			t = LOCAL
-		} else {
-			t = REMOTE
-		}
-	}
-	return t
-}
 
 // Get user logon info by username
 func GetUserLogon(users []*User, name string) (ul UserLogon) {

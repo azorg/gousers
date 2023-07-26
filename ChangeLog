@@ -1,5 +1,6 @@
 2023.07.26
  + monitor command
+ + use EUID option only for local user
 
 2023.07.23
  + show user full info
