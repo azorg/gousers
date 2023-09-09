@@ -78,7 +78,8 @@ run: go.mod go.sum
 	@echo ">>> run $(CMD) $(OPT)"
 	@cd cmd/$(CMD) && go run . $(OPT)
 
-$(OUT): go.mod go.sum cmd/gousers/*.go pkg/utmp/*.go
+$(OUT): go.mod go.sum cmd/gousers/*.go \
+        pkg/utmp/*.go pkg/signal/*.go
 	@echo ">>> build $(OUT)"
 	@mkdir -p $(BIN)
 	@go build -o $(BIN) $(PRJ)/cmd/$(PRJ)/
