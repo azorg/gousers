@@ -20,15 +20,15 @@ bin/gousers dump
 
 echo
 echo "Users from btmp:"
-sudo bin/gousers -f /var/log/btmp
+sudo bin/gousers -file /var/log/btmp
 
 echo
 echo "Dump btmp:"
-sudo bin/gousers -f /var/log/btmp dump
+sudo bin/gousers -file /var/log/btmp dump
 
 #echo
 #echo "Dump wtmp:"
-#bin/gousers -f /var/log/wtmp dump
+#bin/gousers -file /var/log/wtmp dump
 
 echo
 echo "Users stat:"
