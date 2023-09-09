@@ -11,7 +11,8 @@ import (
 	"strings"
 )
 
-// Get EUID by PID
+// Получить эффективный User ID по Process ID.
+// Get EUID by PID.
 func GetEUID(pid uint32) (int, error) {
 	status := fmt.Sprintf("/proc/%d/status", pid)
 	file, err := os.Open(status)
@@ -30,9 +31,10 @@ func GetEUID(pid uint32) (int, error) {
 		}
 	}
 
-	return 0, fmt.Errorf(`can't find "^Uid: " in %s`, file)
+	return 0, fmt.Errorf(`can't find "^Uid: " in %s`, file.Name())
 }
 
+// Получить строку запуска процесса по Process ID.
 // Get CmdLine by PID
 func GetCmdline(pid uint32) (string, error) {
 	file := fmt.Sprintf("/proc/%d/cmdline", pid)

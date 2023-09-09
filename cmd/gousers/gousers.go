@@ -7,24 +7,25 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"gousers/exchange"
-	"gousers/pkg/utmp"
-	"gousers/pkg/vsnotify"
 	"io"
 	"log"
 	"os"
 	"time"
+
+	"gousers/dto"
+	"gousers/pkg/signal"
+	"gousers/pkg/utmp"
 )
 
-const DEBUG = false // log debug setting
+const DEBUG = true
 
-const NOTIFY_INTERVAL = 100 * time.Millisecond // FIXME: why 100 ms?
+const FOLLOW_INTERVAL = 250 * time.Millisecond // FIXME: why 250 ms?
 
-// Options
+// Options (default values)
 var (
-	Notify = false
-	NoEUID = false
-	File   = utmp.DefaultFile // "/var/run/utmp"
+	Follow  = false
+	UseEUID = false
+	File    = "/var/log/wtmp"
 )
 
 func Usage() {
@@ -34,9 +35,9 @@ Usage: gousers [options] [command]
 Options:
   -help|--help - print full help
   -h|--h       - print help about options only
-  -file <file> - use a specific file instead of /var/run/utmp
-  -notify      - notify mode (Ctrl+C to stop)
-  -noeuid      - don't use EUID (for wtmp/btmp)
+  -file <file> - use a specific file instead of /var/log/wtmp
+  -follow      - follow dump mode (Ctrl+C to stop) like "tail -f"
+  -euid        - use EUID (for utmp)
 
 Commands:
   user[s]         - show users is currently logged (default command)
@@ -51,11 +52,13 @@ Example:
   gousers dump                             - dump /var/run/utmp
   gousers info alice                       - show full information about user alice
   gousers stat                             - show logged user statistics
-  gousers -file /var/log/btmp -noeuid user - show users from /var/run/btmp
+  gousers -file /var/log/btmp -noeuid user - show users from /var/log/btmp
   gousers -file /var/log/wtmp -noeuid dump - dump /var/log/wtmp
+  gousers -file /var/run/utmp              - show users from /var/run/utmp
+  gousers -follow dump                     - follow dump /var/log/wtmp
 `)
 	os.Exit(0)
-} // func Usage()
+}
 
 func main() {
 	// Check --help or -help options
@@ -69,109 +72,80 @@ func main() {
 
 	// Parse options (flags)
 	flag.StringVar(&File, "file", File, "Input utmp/wtmp/btmp file")
-	flag.BoolVar(&Notify, "notify", Notify, "Notify mode (Ctrl+C to stop)")
-	flag.BoolVar(&NoEUID, "noeuid", NoEUID, "don't use EUID (for wtmp/btmp)")
+	flag.BoolVar(&Follow, "follow", Follow, "Follow dump mode (Ctrl+C to stop)")
+	flag.BoolVar(&UseEUID, "euid", UseEUID, "use EUID (for utmp)")
 	flag.Parse()
 
 	// Parse commands
 	args := flag.Args() // os.Args without flags
 	argc := len(args)
 
-	// Define notify runner closure function
-	runer := func(fn func(fname string, useEUID bool)) func(string, bool) {
-		if !Notify {
-			return fn
-		}
-		return func(fname string, useEUID bool) {
-			fn(fname, useEUID)
-			n, err := vsnotify.New(fname, NOTIFY_INTERVAL)
-			if err != nil {
-				log.Fatalf("fatal: %v", err)
-			}
-			for run := true; run; {
-				select {
-				case <-n.Update:
-					fmt.Println()
-					fn(fname, useEUID)
-				case <-CtrlC:
-					run = false
-				}
-			}
-			n.Cancel()
-		}
-	}
-
 	if argc == 0 { // show currently logged users by default
-		runer(ShowUsers)(File, !NoEUID) // #1
+		ShowUsers(File, UseEUID) // #1
 		return
 	}
 
 	arg := args[0]
 
 	if arg == "users" || arg == "user" { // show currently logged users
-		runer(ShowUsers)(File, !NoEUID) // #2
-	} else if arg == "info" { // show full information about user by username (JSON)
+		ShowUsers(File, UseEUID) // #2
+	} else if arg == "info" { // show full information about user (JSON)
 		if argc < 2 {
 			log.Fatalf("fatal: no user selected (run with --help option)")
 		} else {
-			ShowUser(File, args[1], !NoEUID)
+			ShowUser(File, args[1], UseEUID)
 		}
 	} else if arg == "stat" { // show logged user statistics (JSON)
-		runer(ShowUsersStat)(File, !NoEUID)
+		ShowUsersStat(File, UseEUID)
 	} else if arg == "dump" { // dump utmp/wtmp/btmp file
-		DumpUtmp(File, Notify)
+		DumpUtmp(File, Follow)
 	} else if arg == "monitor" { // login/logout monitor
-		Monitor(File, !NoEUID)
+		Monitor(File, UseEUID)
 	} else { // show error and exit if command is unknown
-		fmt.Fprintf(os.Stderr, "error: unknown command '%s' (run with --help option)\n", arg)
-		os.Exit(1)
+		log.Fatalf("error: unknown command '%s' (run with --help option)\n", arg)
 	}
 } // func main()
 
 // Show active users from utmp/wtmp/btmp file
 func ShowUsers(fname string, useEUID bool) {
-	users, err := utmp.Users(fname, useEUID)
+	users, err := utmp.GetUsers(fname, useEUID)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: can't read utmp/wtmp/btmp file: %v\n", err)
-		os.Exit(2)
+		log.Fatalf("fatal: can't read utmp/wtmp/btmp file: %v\n", err)
 	}
 
 	for _, u := range users {
-		utmp.UserPrint(os.Stdout, u)
+		u.Print(os.Stdout)
 	}
 }
 
 // Show Full user info
 func ShowUser(fname, username string, useEUID bool) {
-	users, err := utmp.Users(fname, useEUID)
+	users, err := utmp.GetUsers(fname, useEUID)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: can't read utmp/wtmp/btmp file: %v\n", err)
-		os.Exit(2)
+		log.Fatalf("fatal: can't read utmp/wtmp/btmp file: %v\n", err)
 	}
 
-	uf, err := utmp.GetUserFull(users, username)
+	li, err := users.GetLoginInfo(username)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(2)
+		log.Fatalf("fatal: %v\n", err)
 	}
 
-	// Repack utmp.UserFull to exchange.User
-	u := exchange.User{
-		Name:        uf.Name,
-		UID:         uf.UID,
-		GID:         uf.GID,
-		DisplayName: uf.DisplayName,
-		HomeDir:     uf.HomeDir,
-		Groups:      uf.Groups,
-		LogonType:   exchange.LogonType[uf.Type],
-		LogonTime:   uf.Time,
-		Logons:      uf.Logons}
+	// Repack utmp.LoginInfo to dto.User
+	u := dto.User{
+		Name:        li.Name,
+		UID:         li.UID,
+		GID:         li.GID,
+		DisplayName: li.DisplayName,
+		HomeDir:     li.HomeDir,
+		Groups:      li.Groups,
+		LogonType:   dto.LogonType[li.Type],
+		LogonTime:   li.Time,
+		Logons:      li.Logons}
 
 	// Encode full user info to JSON
 	data, err := json.MarshalIndent(&u, "", "  ")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: json.Marshal():", err)
-		return
+		log.Fatalf("fatal: json.Marshal():", err)
 	}
 
 	fmt.Println(string(data))
@@ -179,35 +153,44 @@ func ShowUser(fname, username string, useEUID bool) {
 
 // Show logged user statistics (JSON)
 func ShowUsersStat(fname string, useEUID bool) {
-	users, err := utmp.Users(fname, useEUID)
+	users, err := utmp.GetUsers(fname, useEUID)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: can't read utmp/wtmp/btmp file: %v\n", err)
-		os.Exit(2)
+		log.Fatalf("fatal: can't read utmp/wtmp/btmp file: %v\n", err)
 	}
 
 	// get logged user statistics
-	us := utmp.GetUsersStat(users)
+	us := users.GetLoginStat()
+
+	stat := dto.UsersStat{
+		Total:      us.Total,
+		LocalX:     us.LocalX,
+		Local:      us.Local,
+		RemoteX:    us.RemoteX,
+		Remote:     us.Remote,
+		Unknown:    us.Unknown,
+		LocalRoot:  us.LocalRoot,
+		RemoteRoot: us.RemoteRoot,
+		Active:     us.Active.Name}
 
 	// Encode statistics to JSON
-	data, err := json.MarshalIndent(&us, "", "  ")
+	data, err := json.MarshalIndent(&stat, "", "  ")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: json.Marshal():", err)
-		return
+		log.Fatalf("fatal: json.Marshal():", err)
 	}
 
 	fmt.Println(string(data))
-} // func ShowUsersStat()
+}
 
 // Dump utmp/wtmp/btmp file as plain text
-func DumpUtmp(fname string, notify bool) {
+func DumpUtmp(fname string, follow bool) {
 	f, err := os.Open(fname)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: can't open utmp/wtmp/btmp file: %v\n", err)
-		os.Exit(2)
+		log.Fatalf("fatal: can't open utmp/wtmp/btmp file: %v\n", err)
 	}
 	defer f.Close()
 
-	for stop := false; !stop; {
+Loop:
+	for {
 		var u utmp.Utmp
 		err = utmp.Read(f, &u)
 		if err != nil {
@@ -215,37 +198,41 @@ func DumpUtmp(fname string, notify bool) {
 				log.Fatalf(`fatal: read "%s": %v`, fname, err)
 			}
 
-			if !notify {
+			if !follow {
 				break
 			}
 
 			select {
-			case <-time.After(NOTIFY_INTERVAL):
-			case <-CtrlC:
-				stop = true
+			case <-time.After(FOLLOW_INTERVAL):
+			case <-signal.CtrlC:
+				break Loop
 			}
 			continue
 		}
 
-		utmp.Print(os.Stdout, u)
+		u.Print(os.Stdout)
 	} // for
-} // func DumpUtmp
+}
 
 // Login/logout monitor
 func Monitor(fname string, useEUID bool) {
-	n, err := utmp.NewNotify(fname, useEUID, NOTIFY_INTERVAL)
+	l, err := utmp.NewLogin(fname, useEUID)
 	if err != nil {
 		log.Fatalf("fatal: %v", err)
 	}
 
-	for run := true; run; {
+Loop:
+	for {
 		select {
-		case evt := <-n.Update:
+		case evt := <-l.C():
 			if len(evt.Login) != 0 {
 				fmt.Printf(evt.Time.Format("2006-01-02 15:04:05"))
 				fmt.Printf(" login:")
 				for _, ut := range evt.Login {
 					fmt.Printf(" %s[%s]", ut.User, ut.TTY)
+				}
+				if evt.Stat.Active != nil {
+					fmt.Printf(" active=%s", evt.Stat.Active.Name)
 				}
 				fmt.Println()
 			}
@@ -256,14 +243,17 @@ func Monitor(fname string, useEUID bool) {
 				for _, ut := range evt.Logout {
 					fmt.Printf(" %s[%s]", ut.User, ut.TTY)
 				}
+				if evt.Stat.Active != nil {
+					fmt.Printf(" active=%s", evt.Stat.Active.Name)
+				}
 				fmt.Println()
 			}
 
-		case <-CtrlC:
-			run = false
+		case <-signal.CtrlC:
+			break Loop
 		}
 	}
-	n.Cancel()
-} // func Monitor()
+	l.Close()
+}
 
 // EOF: "gousers.go"

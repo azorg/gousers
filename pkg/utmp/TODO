@@ -1,6 +1,1 @@
-[-] add support and test 32-bit platform
-[+] add user statistics
-[+] add analyzes of real UID, EUID of logon process
-[+] добавить статистику входов для одного пользователя
-[+] добавить компонент отслеживания логинов в реальном времени (notify)
-[-] разобраться с пользователями REMOTE_X
+[-] проверить/доработать для 32-ти битных платформ

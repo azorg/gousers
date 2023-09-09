@@ -7,14 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"time"
 )
 
-// Default file to read
-var DefaultFile = "/var/run/utmp"
-
-// Values for Type field
+// Тип записи в utmp/wtmp/btmp файле.
+// Values for Type field.
 const (
 	EMPTY         = 0 // Record does not contain valid info (unkonwn on Linux)
 	RUN_LVL       = 1 // Change in system run-level (see `man 1 init`)
@@ -28,7 +25,8 @@ const (
 	ACCOUNTING    = 9 // Not implemented
 )
 
-// Types as test
+// Тип записи в виде строки.
+// Type field as string.
 var TypeString = [...]string{
 	"EMPTY",      // 0
 	"RUN_LVL",    // 1
@@ -42,14 +40,16 @@ var TypeString = [...]string{
 	"ACCOUNTING", // 9
 }
 
-// Magic sizes of Utmp fields
+// Размеры полей структуры `utmp`.
+// Sizes of Utmp fields.
 const (
 	LINESIZE = 32
 	NAMESIZE = 32
 	HOSTSIZE = 256
 )
 
-// utmp struct for 64-bit platforms
+// Структура `utmp` для 64-х битных платформ.
+// utmp struct for 64-bit platforms.
 type Utmp struct {
 	Type        int16          // Type of record
 	Pad0_unused [2]byte        //
@@ -126,73 +126,5 @@ func IPv4(addrV6 [4]int32) net.IP {
 	}
 	return net.IP{}
 }
-
-// Debug print Utmp
-func Print(f *os.File, u Utmp) {
-	t := Time(u.TV)
-	fmt.Fprint(f, t.Format("2006-01-02 15:04:05"))
-
-	Type := int(u.Type)
-	fmt.Fprintf(f, " #%d %10s", Type, TypeString[Type])
-
-	if u.Type == BOOT_TIME { // reboot
-		if user := Str(u.User[:]); user != "" {
-			fmt.Fprint(f, " User='", user, "'")
-		}
-
-		if host := Str(u.Host[:]); host != "" {
-			fmt.Fprint(f, " Kernel='", host, "'")
-		}
-	} else if u.Type == RUN_LVL { // run level
-		fmt.Fprint(f, " RL=", RunLvl(u.PID))
-	} else {
-		user := Str(u.User[:])
-
-		if user != "" {
-			fmt.Fprint(f, " User='", user, "'")
-		}
-
-		if tty := Str(u.Line[:]); tty != "" {
-			fmt.Fprint(f, " TTY='", tty, "'")
-		}
-
-		if id := Str(u.ID[:]); id != "" {
-			fmt.Fprint(f, " ID='", id, "'")
-		}
-
-		pid := PID(u.PID)
-		if pid != 0 {
-			fmt.Fprint(f, " PID=", pid)
-		}
-
-		euid, err := GetEUID(pid)
-		if err == nil {
-			fmt.Fprint(f, " EUID=", euid)
-		}
-
-		if host := Str(u.Host[:]); host != "" {
-			fmt.Fprint(f, " Host='", host, "'")
-		}
-
-		if ip := IPv4(u.AddrV6); !ip.Equal(net.IP{}) {
-			fmt.Fprint(f, " IP=", ip)
-		}
-
-		cmd, err := GetCmdline(pid)
-		if err == nil {
-			fmt.Fprint(f, " Cmd='", cmd, "'")
-		}
-	}
-
-	if (u.Exit.Termination | u.Exit.Exit) != 0 {
-		fmt.Fprint(f, " Term/Exit=", u.Exit.Termination, "/", u.Exit.Exit)
-	}
-
-	if u.Session != 0 {
-		fmt.Fprint(f, " SID=", u.Session)
-	}
-
-	fmt.Fprintln(f)
-} // func Print()
 
 // EOF: "utmp.go"

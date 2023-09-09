@@ -64,7 +64,7 @@ go.mod:
 
 go.sum: go.mod
 	@echo ">>> create go.sum"
-	@#go get github.com/pelletier/go-toml # read/write TOML-files
+	@go get github.com/fsnotify/fsnotify # Go library to filesystem notifications 
 
 tidy: go.mod
 	@echo ">>> automatic update go.sum by tidy"

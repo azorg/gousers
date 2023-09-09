@@ -1,6 +1,6 @@
 // File: "user.go"
 
-package exchange
+package dto
 
 import "time"
 
@@ -40,17 +40,18 @@ type User struct {
 }
 
 // Logged user statistics.
-// Описание статистики логинов и идентификатор ГЛАВНОГО пользователя сеанса.
+// Описание статистики логинов.
+// Поле Active соджержит имя "главного" пользователя системы.
 type UsersStat struct {
-	Total      int    `json:"total"`                 // Total logged users "Local + Remote + root"
-	LocalX     int    `json:"local_x"`               // Number of users logged in X session (excluding root)
-	Local      int    `json:"local"`                 // Number of local users (excluding root)
-	RemoteX    int    `json:"remote_x"`              // Number of remote users logged in X/xrdp/vnc (excluding root)
-	Remote     int    `json:"remote"`                // Number of remote users (excluding root)
+	Total      int    `json:"total,omitempty"`       // Total logged users "Local + Remote + root"
+	LocalX     int    `json:"local_x,omitempty"`     // Number of users logged in X session (excluding root)
+	Local      int    `json:"local,omitempty"`       // Number of local users (excluding root)
+	RemoteX    int    `json:"remote_x,omitempty"`    // Number of remote users logged in X/xrdp/vnc (excluding root)
+	Remote     int    `json:"remote,omitempty"`      // Number of remote users (excluding root)
 	Unknown    int    `json:"unknown,omitempty"`     // Total number of unknown logged users (must be 0)
 	LocalRoot  bool   `json:"local_root,omitempty"`  // Local root logged
 	RemoteRoot bool   `json:"remote_root,omitempty"` // Remote root logged
-	ActiveUser string `json:"active_user,omitempty"` // Information about active user or ""
+	Active     string `json:"active,omitempty"`      // Active user (or "")
 }
 
 // EOF: "user.go"

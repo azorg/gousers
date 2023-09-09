@@ -1,4 +1,3 @@
-// gousers
 // File: "log.go"
 
 package main
